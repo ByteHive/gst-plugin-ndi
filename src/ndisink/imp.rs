@@ -151,6 +151,8 @@ impl ElementImpl for NdiSink {
                         )
                         .build(),
                 )
+                // Audio format with full multi-channel support (1 to unlimited channels)
+                // Compatible with NDI SDK 4.0+ and NDI SDK 6.x
                 .structure(
                     gst::Structure::builder("audio/x-raw")
                         .field("format", &gst_audio::AUDIO_FORMAT_F32.to_str())

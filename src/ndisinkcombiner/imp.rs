@@ -123,6 +123,8 @@ impl ElementImpl for NdiSinkCombiner {
             )
             .unwrap();
 
+            // Audio sink pad template with full multi-channel support
+            // Supports 1 to unlimited channels for NDI v3 API compatibility
             let caps = gst::Caps::builder("audio/x-raw")
                 .field("format", &gst_audio::AUDIO_FORMAT_F32.to_str())
                 .field("rate", &gst::IntRange::<i32>::new(1, i32::MAX))

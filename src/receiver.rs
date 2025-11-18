@@ -1558,6 +1558,8 @@ impl Receiver {
                                 * audio_frame.no_channels() as usize
                     );
 
+                    // Convert planar multi-channel audio to interleaved format
+                    // Supports unlimited channels as provided by NDI v3 API
                     for (channel, samples) in src
                         .chunks_exact(audio_frame.channel_stride_or_data_size_in_bytes() as usize)
                         .enumerate()

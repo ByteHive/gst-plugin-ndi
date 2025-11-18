@@ -1,7 +1,12 @@
 GStreamer NDI Plugin for Linux
 ====================
 
-*Compiled and tested with NDI SDK 4.0, 4.1 and 5.0*
+*Compiled and tested with NDI SDK 4.0, 4.1, 5.0, and 6.x*
+
+**Features:**
+- Full multi-channel audio support (supports 1 to unlimited audio channels)
+- Compatible with NDI SDK 6.x (latest version)
+- Uses NDI v3 API for optimal performance and compatibility
 
 This is a plugin for the [GStreamer](https://gstreamer.freedesktop.org/) multimedia framework that allows GStreamer to receive a stream from a [NDI](https://www.newtek.com/ndi/) source. This plugin has been developed by [Teltek](http://teltek.es/) and was funded by the [University of the Arts London](https://www.arts.ac.uk/) and [The University of Manchester](https://www.manchester.ac.uk/).
 
@@ -23,6 +28,12 @@ $ gst-launch-1.0 ndisrc ndi-name="GC-DEV2 (OBS)" ! ndisrcdemux name=demux   demu
 
 # Audio/Video sink pipeline
 $ gst-launch-1.0 videotestsrc is-live=true ! video/x-raw,format=UYVY ! ndisinkcombiner name=combiner ! ndisink ndi-name="My NDI source"  audiotestsrc is-live=true ! combiner.audio
+
+# Multi-channel audio sink pipeline (8 channels example)
+$ gst-launch-1.0 videotestsrc is-live=true ! video/x-raw,format=UYVY ! ndisinkcombiner name=combiner ! ndisink ndi-name="My NDI source"  audiotestsrc is-live=true ! audio/x-raw,channels=8 ! combiner.audio
+
+# Audio-only source pipeline with multi-channel support
+$ gst-launch-1.0 ndisrc ndi-name="Audio Source" ! ndisrcdemux name=demux demux.audio ! queue ! audioconvert ! autoaudiosink
 ```
 
 Feel free to contribute to this project. Some ways you can contribute are:

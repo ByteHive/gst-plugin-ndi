@@ -1,5 +1,9 @@
 #![allow(non_camel_case_types, non_upper_case_globals, non_snake_case)]
 
+// NDI SDK bindings
+// Compatible with NDI SDK 4.0, 4.1, 5.0, and 6.x
+// Uses NDI v3 API for optimal performance and compatibility
+
 #[cfg_attr(
     all(target_arch = "x86_64", target_os = "windows"),
     link(name = "Processing.NDI.Lib.x64")
