@@ -22,12 +22,16 @@ static DEFAULT_SENDER_NDI_NAME: Lazy<String> = Lazy::new(|| {
 #[derive(Debug)]
 struct Settings {
     ndi_name: String,
+    clock_audio: bool,
+    clock_video: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Settings {
             ndi_name: DEFAULT_SENDER_NDI_NAME.clone(),
+            clock_audio: false,
+            clock_video: false,
         }
     }
 }
@@ -64,13 +68,29 @@ impl ObjectSubclass for NdiSink {
 impl ObjectImpl for NdiSink {
     fn properties() -> &'static [glib::ParamSpec] {
         static PROPERTIES: Lazy<Vec<glib::ParamSpec>> = Lazy::new(|| {
-            vec![glib::ParamSpecString::new(
-                "ndi-name",
-                "NDI Name",
-                "NDI Name to use",
-                Some(DEFAULT_SENDER_NDI_NAME.as_ref()),
-                glib::ParamFlags::READWRITE,
-            )]
+            vec![
+                glib::ParamSpecString::new(
+                    "ndi-name",
+                    "NDI Name",
+                    "NDI Name to use",
+                    Some(DEFAULT_SENDER_NDI_NAME.as_ref()),
+                    glib::ParamFlags::READWRITE,
+                ),
+                glib::ParamSpecBoolean::new(
+                    "clock-audio",
+                    "Clock Audio",
+                    "Enable audio clocking/synchronization (NDI will rate-limit audio frames)",
+                    false,
+                    glib::ParamFlags::READWRITE,
+                ),
+                glib::ParamSpecBoolean::new(
+                    "clock-video",
+                    "Clock Video",
+                    "Enable video clocking/synchronization (NDI will rate-limit video frames)",
+                    false,
+                    glib::ParamFlags::READWRITE,
+                ),
+            ]
         });
 
         PROPERTIES.as_ref()
@@ -90,6 +110,14 @@ impl ObjectImpl for NdiSink {
                     .get::<String>()
                     .unwrap_or_else(|_| DEFAULT_SENDER_NDI_NAME.clone());
             }
+            "clock-audio" => {
+                let mut settings = self.settings.lock().unwrap();
+                settings.clock_audio = value.get::<bool>().expect("type checked upstream");
+            }
+            "clock-video" => {
+                let mut settings = self.settings.lock().unwrap();
+                settings.clock_video = value.get::<bool>().expect("type checked upstream");
+            }
             _ => unimplemented!(),
         };
     }
@@ -99,6 +127,14 @@ impl ObjectImpl for NdiSink {
             "ndi-name" => {
                 let settings = self.settings.lock().unwrap();
                 settings.ndi_name.to_value()
+            }
+            "clock-audio" => {
+                let settings = self.settings.lock().unwrap();
+                settings.clock_audio.to_value()
+            }
+            "clock-video" => {
+                let settings = self.settings.lock().unwrap();
+                settings.clock_video.to_value()
             }
             _ => unimplemented!(),
         }
@@ -182,14 +218,21 @@ impl BaseSinkImpl for NdiSink {
         let mut state_storage = self.state.lock().unwrap();
         let settings = self.settings.lock().unwrap();
 
-        let send = SendInstance::builder(&settings.ndi_name)
-            .build()
-            .ok_or_else(|| {
-                gst::error_msg!(
-                    gst::ResourceError::OpenWrite,
-                    ["Could not create send instance"]
-                )
-            })?;
+        // Build SendInstance with optional clock synchronization
+        let mut builder = SendInstance::builder(&settings.ndi_name);
+        if settings.clock_audio {
+            builder = builder.clock_audio();
+        }
+        if settings.clock_video {
+            builder = builder.clock_video();
+        }
+
+        let send = builder.build().ok_or_else(|| {
+            gst::error_msg!(
+                gst::ResourceError::OpenWrite,
+                ["Could not create send instance"]
+            )
+        })?;
 
         let state = State {
             send,

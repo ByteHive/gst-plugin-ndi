@@ -7,6 +7,9 @@ GStreamer NDI Plugin for Linux
 - Full multi-channel audio support (supports 1 to unlimited audio channels)
 - Compatible with NDI SDK 6.x (latest version)
 - Uses NDI v3 API for optimal performance and compatibility
+- Advanced timestamping and synchronization capabilities
+- Support for NDI timecode and timestamp metadata
+- Audio/Video clock synchronization for precise frame timing
 
 This is a plugin for the [GStreamer](https://gstreamer.freedesktop.org/) multimedia framework that allows GStreamer to receive a stream from a [NDI](https://www.newtek.com/ndi/) source. This plugin has been developed by [Teltek](http://teltek.es/) and was funded by the [University of the Arts London](https://www.arts.ac.uk/) and [The University of Manchester](https://www.manchester.ac.uk/).
 
@@ -34,6 +37,71 @@ $ gst-launch-1.0 videotestsrc is-live=true ! video/x-raw,format=UYVY ! ndisinkco
 
 # Audio-only source pipeline with multi-channel support
 $ gst-launch-1.0 ndisrc ndi-name="Audio Source" ! ndisrcdemux name=demux demux.audio ! queue ! audioconvert ! autoaudiosink
+```
+
+Synchronization and Timestamping
+-------
+
+The NDI plugin provides comprehensive synchronization and timestamping capabilities for professional broadcast workflows.
+
+### NDI Source (ndisrc) - Timestamp Modes
+
+The `ndisrc` element supports multiple timestamp modes via the `timestamp-mode` property:
+
+- **`receive-time-vs-timecode`** (default): Synchronizes receive time with NDI timecode for optimal clock recovery
+- **`receive-time-vs-timestamp`**: Synchronizes receive time with NDI timestamp
+- **`timecode`**: Uses NDI timecode directly as PTS
+- **`timestamp`**: Uses NDI timestamp directly as PTS
+- **`receive-time`**: Uses local receive time as PTS
+
+**Example with timestamp mode:**
+```console
+$ gst-launch-1.0 ndisrc ndi-name="Camera 1" timestamp-mode=timecode ! ...
+```
+
+### NDI Reference Timestamps
+
+When compiled with `reference-timestamps` feature (enabled by default), the plugin adds NDI timecode and timestamp as GStreamer reference timestamp metadata. This allows downstream elements to access the original NDI timing information.
+
+### NDI Sink (ndisink) - Clock Synchronization
+
+The `ndisink` element supports NDI's built-in clock synchronization:
+
+- **`clock-video`**: Enable video frame rate limiting/clocking by NDI
+- **`clock-audio`**: Enable audio frame rate limiting/clocking by NDI
+
+When enabled, NDI SDK will automatically rate-limit frames to maintain proper timing and synchronization across the network.
+
+**Example with clock synchronization:**
+```console
+# Synchronized video and audio output
+$ gst-launch-1.0 videotestsrc is-live=true ! video/x-raw,format=UYVY ! \
+    ndisinkcombiner name=combiner ! \
+    ndisink ndi-name="Synced Source" clock-video=true clock-audio=true \
+    audiotestsrc is-live=true ! combiner.audio
+
+# Video-only with precise timing
+$ gst-launch-1.0 videotestsrc is-live=true ! video/x-raw,format=UYVY ! \
+    ndisink ndi-name="Precise Video" clock-video=true
+```
+
+### Multi-Source Synchronization
+
+For applications requiring frame-accurate synchronization across multiple NDI sources:
+
+1. Use the same `timestamp-mode` on all `ndisrc` elements
+2. Enable `clock-video` and `clock-audio` on `ndisink` elements
+3. Consider using GStreamer's `netsync` or PTP clock for system-wide synchronization
+
+**Example - Synchronized multi-camera setup:**
+```console
+# Camera 1
+$ gst-launch-1.0 ndisrc ndi-name="Camera 1" timestamp-mode=timecode ! \
+    ndisrcdemux name=d1 d1.video ! queue ! ...
+
+# Camera 2
+$ gst-launch-1.0 ndisrc ndi-name="Camera 2" timestamp-mode=timecode ! \
+    ndisrcdemux name=d2 d2.video ! queue ! ...
 ```
 
 Feel free to contribute to this project. Some ways you can contribute are:
