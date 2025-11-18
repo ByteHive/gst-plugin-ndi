@@ -10,6 +10,8 @@ GStreamer NDI Plugin for Linux
 - Advanced timestamping and synchronization capabilities
 - Support for NDI timecode and timestamp metadata
 - Audio/Video clock synchronization for precise frame timing
+- Seamless NDI to WebRTC conversion for browser-based streaming
+- Hardware-accelerated encoding support (VA-API, NVENC)
 
 This is a plugin for the [GStreamer](https://gstreamer.freedesktop.org/) multimedia framework that allows GStreamer to receive a stream from a [NDI](https://www.newtek.com/ndi/) source. This plugin has been developed by [Teltek](http://teltek.es/) and was funded by the [University of the Arts London](https://www.arts.ac.uk/) and [The University of Manchester](https://www.manchester.ac.uk/).
 
@@ -103,6 +105,169 @@ $ gst-launch-1.0 ndisrc ndi-name="Camera 1" timestamp-mode=timecode ! \
 $ gst-launch-1.0 ndisrc ndi-name="Camera 2" timestamp-mode=timecode ! \
     ndisrcdemux name=d2 d2.video ! queue ! ...
 ```
+
+NDI to WebRTC
+-------
+
+Convert NDI streams to WebRTC for low-latency browser-based viewing and streaming applications.
+
+### Prerequisites
+
+Install GStreamer WebRTC plugins:
+```console
+$ apt-get install gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
+    gstreamer1.0-nice gstreamer1.0-libav
+```
+
+### Basic NDI to WebRTC Pipeline
+
+**Simple video-only WebRTC streaming:**
+```console
+# VP8 encoding (widely supported)
+$ gst-launch-1.0 ndisrc ndi-name="Camera 1" ! ndisrcdemux name=demux \
+    demux.video ! queue ! videoconvert ! vp8enc deadline=1 target-bitrate=2000000 ! \
+    rtpvp8pay ! webrtcbin name=sendrecv
+```
+
+**H.264 encoding (hardware acceleration):**
+```console
+$ gst-launch-1.0 ndisrc ndi-name="Camera 1" ! ndisrcdemux name=demux \
+    demux.video ! queue ! videoconvert ! x264enc tune=zerolatency bitrate=2000 speed-preset=ultrafast ! \
+    rtph264pay ! webrtcbin name=sendrecv
+```
+
+### Full Audio/Video WebRTC Pipeline
+
+**Complete NDI to WebRTC with audio (VP8 + Opus):**
+```console
+$ gst-launch-1.0 ndisrc ndi-name="Studio Camera" timestamp-mode=timecode ! \
+    ndisrcdemux name=demux \
+    demux.video ! queue max-size-buffers=1 leaky=downstream ! videoconvert ! \
+        vp8enc deadline=1 target-bitrate=3000000 cpu-used=4 ! rtpvp8pay ! \
+        queue ! application/x-rtp,media=video,encoding-name=VP8,payload=96 ! \
+        webrtcbin name=sendrecv \
+    demux.audio ! queue max-size-buffers=1 leaky=downstream ! audioconvert ! \
+        audioresample ! opusenc bitrate=128000 ! rtpopuspay ! \
+        queue ! application/x-rtp,media=audio,encoding-name=OPUS,payload=97 ! \
+        sendrecv.
+```
+
+**With H.264 and AAC (better compatibility):**
+```console
+$ gst-launch-1.0 ndisrc ndi-name="Studio Camera" ! ndisrcdemux name=demux \
+    demux.video ! queue ! videoconvert ! x264enc tune=zerolatency bitrate=3000 ! \
+        rtph264pay config-interval=1 ! queue ! \
+        application/x-rtp,media=video,encoding-name=H264,payload=96 ! \
+        webrtcbin name=sendrecv \
+    demux.audio ! queue ! audioconvert ! voaacenc bitrate=128000 ! \
+        rtpmp4apay ! queue ! \
+        application/x-rtp,media=audio,encoding-name=MPEG4-GENERIC,payload=97 ! \
+        sendrecv.
+```
+
+### Low-Latency WebRTC Streaming
+
+**Optimized for minimal latency:**
+```console
+$ gst-launch-1.0 ndisrc ndi-name="Camera" connect-timeout=1000 timeout=1000 ! \
+    ndisrcdemux name=demux \
+    demux.video ! queue max-size-time=0 max-size-buffers=1 leaky=downstream ! \
+        videoconvert ! videoscale ! video/x-raw,width=1280,height=720 ! \
+        vp8enc deadline=1 target-bitrate=2000000 cpu-used=8 lag-in-frames=0 ! \
+        rtpvp8pay mtu=1200 ! queue max-size-time=0 ! \
+        application/x-rtp,media=video,encoding-name=VP8,payload=96 ! \
+        webrtcbin latency=0 name=sendrecv \
+    demux.audio ! queue max-size-time=0 max-size-buffers=1 leaky=downstream ! \
+        audioconvert ! audioresample ! audio/x-raw,rate=48000 ! \
+        opusenc bitrate=96000 frame-size=10 ! rtpopuspay ! \
+        queue max-size-time=0 ! \
+        application/x-rtp,media=audio,encoding-name=OPUS,payload=97 ! \
+        sendrecv.
+```
+
+### Multi-Channel Audio WebRTC
+
+**NDI multi-channel audio to WebRTC stereo:**
+```console
+# Downmix 8-channel NDI audio to stereo for WebRTC
+$ gst-launch-1.0 ndisrc ndi-name="Multi-Channel Source" ! ndisrcdemux name=demux \
+    demux.video ! queue ! videoconvert ! vp8enc deadline=1 ! rtpvp8pay ! \
+        queue ! application/x-rtp,media=video,encoding-name=VP8,payload=96 ! \
+        webrtcbin name=sendrecv \
+    demux.audio ! queue ! audioconvert ! audioresample ! \
+        audio/x-raw,channels=2,rate=48000 ! opusenc ! rtpopuspay ! \
+        queue ! application/x-rtp,media=audio,encoding-name=OPUS,payload=97 ! \
+        sendrecv.
+```
+
+### Hardware-Accelerated Encoding
+
+**Using VA-API (Intel/AMD GPUs):**
+```console
+$ gst-launch-1.0 ndisrc ndi-name="Camera" ! ndisrcdemux name=demux \
+    demux.video ! queue ! vaapipostproc ! vaapih264enc rate-control=cbr bitrate=3000 ! \
+        rtph264pay ! queue ! \
+        application/x-rtp,media=video,encoding-name=H264,payload=96 ! \
+        webrtcbin name=sendrecv \
+    demux.audio ! queue ! audioconvert ! opusenc ! rtpopuspay ! \
+        queue ! application/x-rtp,media=audio,encoding-name=OPUS,payload=97 ! \
+        sendrecv.
+```
+
+**Using NVENC (NVIDIA GPUs):**
+```console
+$ gst-launch-1.0 ndisrc ndi-name="Camera" ! ndisrcdemux name=demux \
+    demux.video ! queue ! videoconvert ! nvh264enc rc-mode=cbr bitrate=3000 ! \
+        rtph264pay ! queue ! \
+        application/x-rtp,media=video,encoding-name=H264,payload=96 ! \
+        webrtcbin name=sendrecv \
+    demux.audio ! queue ! audioconvert ! opusenc ! rtpopuspay ! \
+        queue ! application/x-rtp,media=audio,encoding-name=OPUS,payload=97 ! \
+        sendrecv.
+```
+
+### WebRTC Signaling
+
+Note: The examples above show the media pipeline only. For complete WebRTC functionality, you need:
+
+1. **Signaling server**: To exchange SDP offers/answers and ICE candidates
+2. **STUN/TURN servers**: For NAT traversal
+3. **WebRTC signaling implementation**: Using GStreamer's webrtcbin signals
+
+**Python example with signaling:**
+```python
+import gi
+gi.require_version('Gst', '1.0')
+gi.require_version('GstWebRTC', '1.0')
+from gi.repository import Gst, GstWebRTC
+
+# Initialize
+Gst.init(None)
+
+# Create pipeline
+pipeline = Gst.parse_launch('''
+    ndisrc ndi-name="Camera 1" ! ndisrcdemux name=demux
+    demux.video ! queue ! videoconvert ! vp8enc deadline=1 ! rtpvp8pay !
+        application/x-rtp,media=video,encoding-name=VP8,payload=96 ! webrtcbin name=sendrecv
+    demux.audio ! queue ! audioconvert ! opusenc ! rtpopuspay !
+        application/x-rtp,media=audio,encoding-name=OPUS,payload=97 ! sendrecv.
+''')
+
+webrtc = pipeline.get_by_name('sendrecv')
+
+# Connect signaling callbacks
+webrtc.connect('on-negotiation-needed', on_negotiation_needed)
+webrtc.connect('on-ice-candidate', on_ice_candidate)
+
+# Set STUN server
+webrtc.set_property('stun-server', 'stun://stun.l.google.com:19302')
+
+pipeline.set_state(Gst.State.PLAYING)
+```
+
+For complete working examples with signaling, see:
+- [GStreamer WebRTC demos](https://gitlab.freedesktop.org/gstreamer/gst-examples/-/tree/master/webrtc)
+- [gst-plugins-rs webrtc examples](https://gitlab.freedesktop.org/gstreamer/gst-plugins-rs/-/tree/main/net/webrtc)
 
 Feel free to contribute to this project. Some ways you can contribute are:
 * Testing with more hardware and software and reporting bugs
